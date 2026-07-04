@@ -169,19 +169,7 @@
   };
 
   Renderer.prototype._drawGrid = function (ctx) {
-    var axisMode = (this.game && this.game.axisMode) || 'EveryUnit';
-    if (axisMode === 'NoAxis' || axisMode === 'OnlyMain') return;
-    ctx.strokeStyle = 'rgba(120,200,180,0.06)';
-    ctx.lineWidth = 1;
-    var step = this.W / C.PLANE_GAME_LENGTH; // ~15.4px per game unit
-    var unitStep = axisMode === 'EveryFive' ? 5 : 1;
-    step *= unitStep;
-    ctx.beginPath();
-    for (var x = this.W / 2; x < this.W; x += step) { ctx.moveTo(x, 0); ctx.lineTo(x, this.H); }
-    for (var x2 = this.W / 2; x2 > 0; x2 -= step) { ctx.moveTo(x2, 0); ctx.lineTo(x2, this.H); }
-    for (var y = this.H / 2; y < this.H; y += step) { ctx.moveTo(0, y); ctx.lineTo(this.W, y); }
-    for (var y2 = this.H / 2; y2 > 0; y2 -= step) { ctx.moveTo(0, y2); ctx.lineTo(this.W, y2); }
-    ctx.stroke();
+    // Grid lines removed.
   };
 
   Renderer.prototype._drawAxes = function (ctx) {
@@ -391,56 +379,7 @@
   // run the verified engine from THAT player's perspective (currentTurn already
   // points at them off-turn) and draw their prospective shot in their color.
   Renderer.prototype._drawOpponentPreview = function (ctx, terrainReversed) {
-    var g = this.game;
-    if (g.drawingFunction || g.exploding) return;
-    var fnStr = g.previewFunction;
-    if (!fnStr) return;
-    var cur = g.getCurrentTurnPlayer();
-    if (!cur || cur.local) return;          // only for opponents' turns
-    // recompute only when the string changed (cache keyed by fn text)
-    if (this._oppCacheStr !== fnStr) {
-      this._oppCacheStr = fnStr;
-      this._oppCache = null;
-      try {
-        var fn = new GW.GwFunction(fnStr);
-        var inverted = cur.team !== GW.GameConstants.TEAM1;
-        this._oppCache = fn.process(g.gameMode, g.obstacle, g.players, g.currentTurn,
-          cur.soldiers[cur.currentTurnSoldier].angle || 0, inverted);
-      } catch (e) { this._oppCache = null; }
-    }
-    var res = this._oppCache;
-    if (!res || res.numSteps < 2) return;
-    var drawReversed = GW.funcDrawReversed(g.isFunctionReversed(), terrainReversed);
-    ctx.save();
-    ctx.setLineDash([5, 5]);
-    ctx.strokeStyle = cur.color;
-    ctx.globalAlpha = 0.7;
-    ctx.shadowColor = cur.color; ctx.shadowBlur = 6;
-    ctx.lineWidth = 1.5;
-    ctx.beginPath();
-    var origin = cur.soldiers[cur.currentTurnSoldier];
-    if (origin) { var ox = this._soldierScreenX(origin, terrainReversed); ctx.moveTo(ox, origin.y); }
-    for (var i = 0; i < res.numSteps; i++) {
-      var px = GW.convertX(res.valuesX[i]);
-      var py = GW.convertY(res.valuesY[i]);
-      if (drawReversed) px = this.W - px;
-      if (i === 0 && !origin) ctx.moveTo(px, py); else ctx.lineTo(px, py);
-    }
-    ctx.stroke();
-    ctx.restore();
-    // predicted hits from the opponent's aim
-    if (res.hits && res.hits.length) {
-      ctx.save();
-      for (var h = 0; h < res.hits.length; h++) {
-        var hit = res.hits[h];
-        var sol = g.players[hit.player].soldiers[hit.soldier];
-        var hx = terrainReversed ? this.W - sol.x : sol.x;
-        ctx.strokeStyle = 'rgba(255,160,60,0.9)';
-        ctx.lineWidth = 2;
-        ctx.beginPath(); ctx.arc(hx, sol.y, C.SOLDIER_RADIUS + 4, 0, Math.PI * 2); ctx.stroke();
-      }
-      ctx.restore();
-    }
+    // Opponent live function curve preview removed.
   };
 
   Renderer.prototype._drawTrajectory = function (ctx, terrainReversed) {
@@ -544,47 +483,7 @@
     return run();
   };
   Renderer.prototype._drawPreview = function (ctx, terrainReversed) {
-    var g = this.game;
-    if (g.drawingFunction || !this._previewStr) return;
-    if (!this._previewCache) this._previewCache = this._computePreview();
-    var res = this._previewCache;
-    if (!res || res.numSteps < 2) return;
-    // when aiming from an explicit view, use THAT player's team for orientation
-    var view = this._previewView;
-    var aimer = view ? g.players[view.playerIdx] : g.getCurrentTurnPlayer();
-    var funcReversed = aimer ? aimer.team === GW.GameConstants.TEAM2 : g.isFunctionReversed();
-    var drawReversed = GW.funcDrawReversed(funcReversed, terrainReversed);
-    ctx.save();
-    ctx.setLineDash([6, 6]);
-    ctx.strokeStyle = 'rgba(255,255,255,0.55)';
-    ctx.lineWidth = 1.5;
-    ctx.beginPath();
-    var origin = aimer && aimer.soldiers[view ? view.soldierIdx : aimer.currentTurnSoldier];
-    if (origin) {
-      var sx = this._soldierScreenX(origin, terrainReversed);
-      ctx.moveTo(sx, origin.y);
-    }
-    for (var i = 0; i < res.numSteps; i++) {
-      var px = GW.convertX(res.valuesX[i]);
-      var py = GW.convertY(res.valuesY[i]);
-      if (drawReversed) px = this.W - px;
-      if (i === 0 && !origin) ctx.moveTo(px, py); else ctx.lineTo(px, py);
-    }
-    ctx.stroke();
-    ctx.restore();
-    // highlight predicted hits
-    if (res.hits && res.hits.length) {
-      ctx.save();
-      for (var h = 0; h < res.hits.length; h++) {
-        var hit = res.hits[h];
-        var sol = g.players[hit.player].soldiers[hit.soldier];
-        var x = terrainReversed ? this.W - sol.x : sol.x;
-        ctx.strokeStyle = '#ff5050';
-        ctx.lineWidth = 2;
-        ctx.beginPath(); ctx.arc(x, sol.y, C.SOLDIER_RADIUS + 4, 0, Math.PI * 2); ctx.stroke();
-      }
-      ctx.restore();
-    }
+    // Live function curve preview removed.
   };
 
   // ---- user-drawn trajectory points (指定轨迹 mode) ----

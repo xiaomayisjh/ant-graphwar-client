@@ -19,6 +19,35 @@ def run(cmd: list[str], *, env: dict[str, str] | None = None) -> None:
     subprocess.run(cmd, cwd=ROOT, env=env, check=True)
 
 
+def detect_webkit_tag() -> str | None:
+    """Detect which webkit2gtk version is available on the system, return the
+    matching Go build tag (``webkit2_41`` for 4.1, ``None`` for the default
+    4.0).  Exits with a helpful message if neither is found."""
+    versions = [
+        ("webkit2gtk-4.1", "webkit2_41"),
+        ("webkit2gtk-4.0", None),
+    ]
+    for pkg, tag in versions:
+        try:
+            subprocess.run(
+                ["pkg-config", "--exists", pkg],
+                check=True,
+                capture_output=True,
+            )
+            return tag
+        except subprocess.CalledProcessError:
+            continue
+
+    print(
+        "Error: no webkit2gtk development package found.\n"
+        "Install one of the following:\n"
+        "  sudo apt install libwebkit2gtk-4.1-dev   (recommended)\n"
+        "  sudo apt install libwebkit2gtk-4.0-dev",
+        file=sys.stderr,
+    )
+    raise SystemExit(1)
+
+
 def host_platform() -> str:
     system = platform.system().lower()
     machine = platform.machine().lower()
@@ -71,8 +100,18 @@ def main() -> int:
     cmd = wails_command() + ["build", "-platform", args.platform]
     if args.clean:
         cmd.append("-clean")
+
+    if args.platform.startswith("linux/"):
+        webkit_tag = detect_webkit_tag()
+        if webkit_tag:
+            linux_tags = [webkit_tag]
+            if args.tags:
+                linux_tags.append(args.tags)
+            args.tags = ",".join(linux_tags)
+
     if args.tags:
         cmd += ["-tags", args.tags]
+
     if args.webview2 and args.platform.startswith("windows/"):
         cmd += ["-webview2", args.webview2]
 
