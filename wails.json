@@ -1,0 +1,16 @@
+{
+  "$schema": "https://wails.io/schemas/config.v2.json",
+  "name": "graphwar-desktop-open",
+  "outputfilename": "GraphwarDesktopOpen",
+  "frontend:install": "",
+  "frontend:build": "",
+  "frontend:dev:watcher": "",
+  "wailsjsdir": "./frontend",
+  "author": {
+    "name": "Graphwar Web port"
+  },
+  "info": {
+    "productName": "Graphwar Desktop Open",
+    "comments": "Open-source Graphwar desktop client with networking, hosting, and manual function input."
+  }
+}

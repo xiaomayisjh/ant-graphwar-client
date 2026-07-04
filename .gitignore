@@ -1,0 +1,10 @@
+/build/bin/
+/build/darwin/
+/build/linux/
+/build/golang-build-output/
+/build/golang-build-output.7z
+/build/windows/*syso
+*.log
+*.tmp
+cpolar*.json
+cpolar.exe

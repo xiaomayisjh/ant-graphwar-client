@@ -1,0 +1,405 @@
+﻿<!DOCTYPE html>
+<html lang="zh">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Graphwar · Web</title>
+<link rel="stylesheet" href="vendor/katex/katex.min.css">
+<link rel="stylesheet" href="css/style.css">
+</head>
+<body>
+<div id="app">
+
+  <!-- ===================== MENU ===================== -->
+  <section id="screen-menu" class="screen active">
+    <div class="brand">
+      <h1>GRAPH<span>WAR</span></h1>
+      <p class="tag">用数学函数击中敌人 · Web 客户端，可与原版联机</p>
+    </div>
+
+    <div class="panel settings-panel">
+      <label class="field">
+        <span>玩家名</span>
+        <input id="playerName" type="text" maxlength="20" placeholder="Player">
+      </label>
+      <label class="field">
+        <span>游戏版本</span>
+        <select id="gameVersion">
+          <option value="v1">Graphwar I</option>
+          <option value="v2">Graphwar II</option>
+        </select>
+      </label>
+      <label class="field">
+        <span>连接方式 / Connection</span>
+        <select id="connMode">
+          <option value="direct">直连自建后端 (WebSocket 原生)</option>
+          <option value="bridge">经桥接连 TCP 服务器 (官方/任意)</option>
+        </select>
+      </label>
+      <label class="field" id="bridgeRow">
+        <span>桥接地址 / Bridge (WS↔TCP)</span>
+        <input id="bridgeUrl" type="text" placeholder="ws://localhost:8080">
+      </label>
+      <div class="v2-client-options">
+        <div class="v2-client-head">
+          <span>Graphwar II 客户端选项</span>
+          <label class="switch-field"><input type="checkbox" id="v2DebugToggle"> <span>协议日志</span></label>
+        </div>
+        <div class="v2-avatar-grid">
+          <label class="field">
+            <span>身体外观</span>
+            <input id="v2SkinGraphics" type="text" list="v2SkinOptions" placeholder="留空=不主动设置">
+          </label>
+          <label class="field">
+            <span>表情外观</span>
+            <input id="v2FaceGraphics" type="text" list="v2FaceOptions" placeholder="留空=不主动设置">
+          </label>
+          <label class="field">
+            <span>帽子外观</span>
+            <input id="v2HatGraphics" type="text" list="v2HatOptions" placeholder="留空=不主动设置">
+          </label>
+        </div>
+        <div class="v2-debug-line">
+          <button id="btnV2ClearLog" class="btn small ghost" type="button">清空日志</button>
+          <span id="v2DebugPath" class="mini-path"></span>
+        </div>
+      </div>
+      <datalist id="v2SkinOptions"></datalist>
+      <datalist id="v2FaceOptions"></datalist>
+      <datalist id="v2HatOptions"></datalist>
+      <p class="hint">
+        <b>直连</b>：连 <code>node server/index.js</code> 自建后端，浏览器与原版 Java 玩家可同房（后端同端口兼收 TCP+WS）。<br>
+        <b>桥接</b>：连官方 graphwar.com 或任意原始 TCP 服务器，需先跑 <code>node bridge/bridge.js</code>。
+      </p>
+    </div>
+
+    <div class="menu-grid">
+      <div class="panel menu-card">
+        <h2>全局大厅</h2>
+        <p>连接官方/自建 GlobalServer，浏览房间并加入。</p>
+        <label class="field inline"><span>主机</span><input id="globalHost" type="text" value="www.graphwar.com"></label>
+        <label class="field inline"><span>端口</span><input id="globalPort" type="number" value="23761"></label>
+        <button id="btnJoinGlobal" class="btn primary">进入大厅</button>
+      </div>
+
+      <div class="panel menu-card">
+        <h2>直连房间</h2>
+        <p>直接连接某个 GraphServer / RoomServer（局域网或指定 IP）。</p>
+        <label class="field inline"><span>主机/IP</span><input id="directHost" type="text" value="127.0.0.1"></label>
+        <label class="field inline"><span>端口</span><input id="directPort" type="number" value="6112"></label>
+        <button id="btnDirectJoin" class="btn primary">加入房间</button>
+      </div>
+    </div>
+
+    <!-- ===== 一键开服（默认关闭，点标题展开）===== -->
+    <div class="panel host-panel">
+      <button id="hostToggle" class="host-toggle" type="button" aria-expanded="false">
+        <span class="chev">▸</span> 一键开服（自己当房主，开完自动加入） · <span class="muted">默认关闭</span>
+      </button>
+      <div id="hostBody" class="host-body" style="display:none">
+        <label class="field inline">
+          <span>对外 IP</span>
+          <input id="hostPublicIp" type="text" value="127.0.0.1" title="别人要连到你时填你的局域网/公网 IP；只自己玩填 127.0.0.1">
+        </label>
+        <div class="host-grid">
+          <div class="host-card">
+            <h3>① 开单人房间</h3>
+            <p>只起一个房间（GraphServer）。最轻量，适合和朋友直连或局域网快速开打；同端口兼收原版 Java 与网页玩家。</p>
+            <label class="field inline"><span>端口</span><input id="hostRoomPort" type="number" min="0" max="65535" value="0" title="0=自动分配空闲端口；要让别人连/端口转发就填固定端口（如6112）"></label>
+            <button id="btnHostRoom" class="btn primary">开房间并加入</button>
+            <button id="btnTunnelRoom" class="btn small" type="button">穿透当前一代房间</button>
+          </div>
+          <div class="host-card">
+            <h3>② 开大厅服务器</h3>
+            <p>起完整大厅（GlobalServer）+ 房间池，别人能在大厅里浏览并加入你的房间。适合当“房主服”。</p>
+            <label class="field inline"><span>大厅端口</span><input id="hostLobbyPort" type="number" min="0" max="65535" value="0" title="0=自动；官方默认23761。房间池端口另从房间基址递增"></label>
+            <button id="btnHostLobby" class="btn primary">开大厅并进入</button>
+            <button id="btnTunnelLobby" class="btn small" type="button">穿透当前大厅</button>
+          </div>
+          <div class="host-card">
+            <h3>Graphwar II 本地房间</h3>
+            <p>可直接创建二代兼容本地 RoomServer；发布到官服大厅时会把官方连接转发到本地房间。</p>
+            <label class="field inline"><span>主机</span><input id="v2LocalHost" type="text" value="::1"></label>
+            <label class="field inline"><span>端口</span><input id="v2LocalPort" type="number" min="1" max="65535" value="61834"></label>
+            <div class="btn-row">
+              <button id="btnCreateV2Local" class="btn small" type="button">创建二代本地房间</button>
+              <button id="btnPublishV2Official" class="btn small" type="button">发布到官服大厅</button>
+              <button id="btnStopV2OfficialPublish" class="btn small" type="button">停止发布</button>
+              <button id="btnJoinV2Local" class="btn small" type="button">加入二代本地房间</button>
+              <button id="btnTunnelV2Local" class="btn small" type="button">穿透二代本地房间</button>
+            </div>
+            <p class="hint" id="v2LocalDetectStatus">尚未检测到 Graphwar II 本地房间。</p>
+          </div>
+          <div class="host-card cpolar-card">
+            <h3>cpolar 内网穿透</h3>
+            <p id="cpolarSummary">尚未读取 cpolar 状态。</p>
+            <div class="cpolar-controls">
+              <button id="btnCpolarInit" class="btn small" type="button">初始化 5 个账号</button>
+              <button id="btnCpolarRefresh" class="btn small" type="button">刷新</button>
+              <button id="btnCpolarStopAll" class="btn small ghost" type="button">关闭全部</button>
+            </div>
+            <div id="cpolarTunnels" class="cpolar-tunnels"></div>
+            <p class="hint" id="cpolarHint">把 tcp 地址发给朋友；一代直连填写 host/port，二代本地房间也填写 host/port。配置文件保存在 exe 同目录。</p>
+          </div>
+        </div>
+        <p class="hint" id="hostHint">桌面版可直接开服（内置后端）。纯浏览器无法监听 TCP——请改用桌面版，或手动运行 <code>node server/index.js</code> 后用「直连」加入。</p>
+      </div>
+    </div>
+  </section>
+
+  <!-- ===================== LOBBY ===================== -->
+  <section id="screen-lobby" class="screen">
+    <header class="bar">
+      <button id="btnLobbyBack" class="btn ghost">‹ 返回</button>
+      <h2>全局大厅</h2>
+      <span class="spacer"></span>
+      <button id="btnBlocklist" class="btn small ghost">🚫 屏蔽名单</button>
+      <button id="btnCreateRoom" class="btn primary">+ 创建房间</button>
+      <span class="counter">在线: <b id="lobbyPlayerCount">0</b></span>
+    </header>
+    <div class="lobby-grid">
+      <div class="panel rooms-panel">
+        <div class="panel-head"><h3>房间</h3><span class="counter">共 <b id="roomCount">0</b></span></div>
+        <div class="room-head"><span>名称</span><span>人数</span><span>模式</span></div>
+        <div id="roomList" class="room-list"></div>
+      </div>
+      <div class="panel chat-panel">
+        <div class="chat-head"><h3>大厅聊天</h3><label class="tr-toggle"><input type="checkbox" id="trAutoInLobby"> 翻译收到</label></div>
+        <div id="lobbyChat" class="chat-box"></div>
+        <form id="lobbyChatForm" class="chat-form">
+          <input id="lobbyChatInput" type="text" placeholder="说点什么…" maxlength="200">
+          <button type="button" id="lobbyTrBtn" class="btn small tr" title="翻译我输入的内容">译</button>
+          <button class="btn small">发送</button>
+        </form>
+      </div>
+      <div class="panel players-panel">
+        <h3>在线玩家</h3>
+        <ul id="lobbyPlayers" class="player-list"></ul>
+      </div>
+    </div>
+  </section>
+
+  <!-- create-room modal -->
+  <div id="createRoomModal" class="modal" style="display:none">
+    <div class="modal-card">
+      <h3>创建房间</h3>
+      <label class="field"><span>房间名</span><input id="crName" type="text" maxlength="40" placeholder="My Room"></label>
+      <label class="field"><span>端口 (登记到官方大厅时用，0=自动)</span><input id="crPort" type="number" value="6112"></label>
+      <label class="field" style="flex-direction:row;align-items:center;gap:8px">
+        <input type="checkbox" id="crPublic" style="width:auto"> <span style="color:var(--muted)">登记到当前大厅（让别人浏览加入）</span>
+      </label>
+      <p class="hint" id="crHint"></p>
+      <div class="btn-row">
+        <button id="crCancel" class="btn ghost">取消</button>
+        <button id="crConfirm" class="btn primary">创建并加入</button>
+      </div>
+    </div>
+  </div>
+
+  <!-- blocklist modal -->
+  <div id="blocklistModal" class="modal" style="display:none">
+    <div class="modal-card">
+      <h3>屏蔽名单</h3>
+      <p class="hint">含有这些玩家的房间会被折叠到列表最下方并标记。名称不区分大小写。</p>
+      <form id="blAddForm" class="chat-form" style="margin:10px 0">
+        <input id="blInput" type="text" placeholder="输入要屏蔽的玩家名" maxlength="40">
+        <button class="btn small">添加</button>
+      </form>
+      <ul id="blList" class="player-list" style="max-height:240px"></ul>
+      <div class="btn-row" style="margin-top:12px">
+        <button id="blClose" class="btn primary">完成</button>
+      </div>
+    </div>
+  </div>
+
+  <!-- room management modal (host only) -->
+  <div id="adminModal" class="modal" style="display:none">
+    <div class="modal-card admin-card">
+      <h3>🛠 房间管理 <span class="counter" id="adminRoomInfo"></span></h3>
+      <div class="admin-controls">
+        <label class="compact-toggle"><input type="checkbox" id="adminLock"> 锁定房间（拒绝新人加入）</label>
+        <label class="field inline"><span>最大人数</span><input id="adminMax" type="number" min="1" max="10" value="10" style="width:70px"></label>
+        <button id="adminReset" class="btn small">强制重置对局</button>
+      </div>
+      <h4 style="margin:14px 0 6px">在线玩家</h4>
+      <ul id="adminPlayers" class="player-list" style="max-height:200px"></ul>
+      <h4 style="margin:14px 0 6px">封禁名单</h4>
+      <form id="adminBanForm" class="chat-form" style="margin-bottom:8px">
+        <input id="adminBanInput" type="text" placeholder="按名字或 IP 封禁" maxlength="60">
+        <button class="btn small">封禁</button>
+      </form>
+      <ul id="adminBans" class="player-list" style="max-height:140px"></ul>
+      <div class="btn-row" style="margin-top:12px">
+        <button id="adminClose" class="btn primary">完成</button>
+      </div>
+    </div>
+  </div>
+
+  <!-- ===================== ROOM (pre-game) ===================== -->
+  <section id="screen-room" class="screen">
+    <header class="bar">
+      <button id="btnRoomLeave" class="btn ghost">‹ 离开</button>
+      <h2>房间 · <span id="roomMode">普通函数</span></h2>
+      <span class="spacer"></span>
+      <span class="counter" id="roomLeaderTag" style="display:none">👑 你是房主</span>
+      <button id="btnRoomAdmin" class="btn small" style="display:none">🛠 房间管理</button>
+      <button id="btnNextMode" class="btn small">切换模式</button>
+    </header>
+    <div class="room-grid">
+      <div class="panel team-panel">
+        <div class="panel-head"><h3 class="team-h team1">队伍 1</h3><span class="counter" id="team1Count">0</span></div>
+        <ul id="team1List" class="roster"></ul>
+        <div class="panel-head"><h3 class="team-h team2">队伍 2</h3><span class="counter" id="team2Count">0</span></div>
+        <ul id="team2List" class="roster"></ul>
+      </div>
+      <div class="panel chat-panel">
+        <div class="chat-head"><h3>聊天</h3><label class="tr-toggle"><input type="checkbox" id="trAutoInRoom"> 翻译收到</label></div>
+        <div id="roomChat" class="chat-box"></div>
+        <form id="roomChatForm" class="chat-form">
+          <input id="roomChatInput" type="text" placeholder="说点什么…" maxlength="200">
+          <button type="button" id="roomTrBtn" class="btn small tr" title="翻译我输入的内容">译</button>
+          <button class="btn small">发送</button>
+        </form>
+      </div>
+      <div class="panel controls-panel">
+        <h3>控制</h3>
+        <div class="btn-row">
+          <button id="btnReady" class="btn primary">准备</button>
+          <button id="btnSwitchTeam" class="btn">换队</button>
+        </div>
+        <div class="btn-row">
+          <button id="btnAddSoldier" class="btn">+ 士兵</button>
+          <button id="btnRemoveSoldier" class="btn">− 士兵</button>
+        </div>
+        <div id="v1ComputerControls" class="v1-computer-controls" style="display:none">
+          <div class="v2-bot-title">添加电脑玩家</div>
+          <div class="btn-row">
+            <button id="btnAddComputer" class="btn small" type="button">添加电脑玩家</button>
+            <input id="computerLevelInput" class="compact-input" type="number" min="0" max="9001" value="50" title="AI 等级，9001 表示 Over 9000">
+          </div>
+        </div>
+        <div id="v2RoomControls" class="v2-room-controls" style="display:none">
+          <div class="v2-mode-grid">
+            <button id="btnV2AxisMode" class="v2-mode-card" type="button">
+              <img id="v2AxisIcon" src="assets/gw2/axis_option_3.svg" alt="">
+              <span><b>坐标轴</b><small id="v2AxisLabel">每单位显示</small></span>
+            </button>
+            <button id="btnV2FunctionMode" class="v2-mode-card" type="button">
+              <img id="v2FunctionIcon" src="assets/gw2/fx_option.svg" alt="">
+              <span><b>函数</b><small id="v2FunctionLabel">f(x)</small></span>
+            </button>
+            <button id="btnV2TurnMode" class="v2-mode-card" type="button">
+              <img id="v2TurnIcon" src="assets/gw2/turns_simultaneous.svg" alt="">
+              <span><b>回合</b><small id="v2TurnLabel">同时</small></span>
+            </button>
+            <button id="btnV2TimeMode" class="v2-mode-card" type="button">
+              <img id="v2TimeIcon" src="assets/gw2/turn_1m.svg" alt="">
+              <span><b>时间</b><small id="v2TimeLabel">1 分钟</small></span>
+            </button>
+          </div>
+          <div class="v2-bot-panel">
+            <div class="v2-bot-title">添加机器人</div>
+            <div id="v2BotGrid" class="v2-bot-grid">
+              <button class="v2-bot-btn" type="button" data-level="0" title="机器人 0"><img src="assets/gw2/skins/bot_0.svg" alt=""><span>0</span></button>
+              <button class="v2-bot-btn" type="button" data-level="1" title="机器人 1"><img src="assets/gw2/skins/bot_1.svg" alt=""><span>1</span></button>
+              <button class="v2-bot-btn" type="button" data-level="2" title="机器人 2"><img src="assets/gw2/skins/bot_2.svg" alt=""><span>2</span></button>
+              <button class="v2-bot-btn" type="button" data-level="3" title="机器人 3"><img src="assets/gw2/skins/bot_3.svg" alt=""><span>3</span></button>
+              <button class="v2-bot-btn" type="button" data-level="4" title="机器人 4"><img src="assets/gw2/skins/bot_4.svg" alt=""><span>4</span></button>
+              <button class="v2-bot-btn" type="button" data-level="5" title="机器人 5"><img src="assets/gw2/skins/bot_5.svg" alt=""><span>5</span></button>
+            </div>
+          </div>
+          <button id="btnV2Lock" class="btn small" type="button">锁房</button>
+          <div id="v2ModeSummary" class="v2-mode-summary"></div>
+          <div id="v2PlayGuide" class="v2-play-guide"></div>
+        </div>
+        <p class="hint" id="modeHint">所有人准备后倒计时开始。模式：y=普通，y'=一阶 ODE，y''=二阶 ODE。</p>
+      </div>
+    </div>
+  </section>
+
+  <!-- ===================== GAME ===================== -->
+  <section id="screen-game" class="screen">
+    <header class="bar">
+      <button id="btnGameLeave" class="btn ghost">‹ 离开</button>
+      <span id="turnInfo" class="turn-info">—</span>
+      <span class="spacer"></span>
+      <label class="compact-toggle" title="把当前公式实时渲染成数学排版显示在输入框下方"><input type="checkbox" id="renderFormulaToggle"> 📐 公式渲染</label>
+      <span class="timer">⏱ <b id="turnTimer">60s</b></span>
+    </header>
+
+    <div class="game-layout">
+      <div class="game-main">
+        <div class="game-stage">
+          <canvas id="gameCanvas" width="770" height="450"></canvas>
+        </div>
+        <div id="v2GamePanel" class="v2-game-panel" style="display:none">
+          <div class="v2-game-state">
+            <span id="v2RemoteState">等待函数</span>
+            <span id="v2SubmitState">0/0 已确认</span>
+            <span id="v2ActiveFunction">等待输入函数</span>
+          </div>
+          <div class="v2-view-tools" aria-label="Graphwar II function view controls">
+            <button id="btnV2ViewRecent" class="v2-view-btn active" type="button" title="最近函数"><img src="assets/gw2/view_recent_functions.svg" alt=""></button>
+            <button id="btnV2ViewAll" class="v2-view-btn" type="button" title="全部函数"><img src="assets/gw2/view_all_functions.svg" alt=""></button>
+            <button id="btnV2ViewSingle" class="v2-view-btn" type="button" title="当前弹道"><img src="assets/gw2/view_single_function.svg" alt=""></button>
+          </div>
+          <div id="v2FunctionView" class="v2-function-view"></div>
+        </div>
+        <div class="game-bottom">
+          <form id="funcForm" class="func-bar">
+            <span class="fx">f(x) =</span>
+            <input id="funcInput" type="text" placeholder="例如 2*x^2 + 3*x - 4 ，或 sin(x), e^(-x^2)" autocomplete="off">
+            <span id="funcValidity" class="validity"></span>
+            <button id="btnFire" class="btn primary fire">开火</button>
+          </form>
+          <div id="formulaRender" class="formula-render" style="display:none"></div>
+          <div id="formulaPalette" class="fx-palette-host"></div>
+          <div id="angleControl" class="angle-control" style="display:none">
+            <label>角度</label>
+            <input id="angleSlider" type="range" min="-89" max="89" value="0">
+            <span id="angleValue">0°</span>
+          </div>
+          <div id="opponentPreview" class="preview"></div>
+        </div>
+      </div>
+
+      <aside class="game-side">
+        <div id="gamePlayers" class="game-players"></div>
+        <div class="chat-head">
+          <h3>聊天</h3>
+          <label class="tr-toggle" title="自动翻译收到的消息"><input type="checkbox" id="trAutoIn"> 翻译收到</label>
+        </div>
+        <div id="gameChat" class="chat-box"></div>
+        <form id="gameChatForm" class="chat-form">
+          <input id="gameChatInput" type="text" placeholder="聊天…" maxlength="200">
+          <button type="button" id="gameTrBtn" class="btn small tr" title="翻译我输入的内容">译</button>
+          <button class="btn small">发送</button>
+        </form>
+      </aside>
+    </div>
+  </section>
+
+  <div id="cpolarFloat" class="cpolar-float" style="display:none"></div>
+  <div id="toast" class="toast"></div>
+</div>
+
+<!-- engine first (verified), then net/state/render/app -->
+<script src="vendor/katex/katex.min.js"></script>
+<script src="js/engine.js"></script>
+<script src="js/engine_function.js"></script>
+<script src="js/util.js"></script>
+<script src="js/net.js"></script>
+<script src="js/v2net.js"></script>
+<script src="js/gamedata.js"></script>
+<script src="js/gamedata_handlers.js"></script>
+<script src="js/v2gamedata.js"></script>
+<script src="js/lobby.js"></script>
+<script src="js/translate.js"></script>
+<script src="js/mathrender.js"></script>
+<script src="js/formula_input.js"></script>
+<script src="js/renderer.js"></script>
+<script src="js/app.js"></script>
+<script src="js/desktop.js"></script>
+</body>
+</html>
+
