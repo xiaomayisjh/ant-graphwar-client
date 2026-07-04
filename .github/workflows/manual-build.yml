@@ -3,6 +3,14 @@ name: Manual Build
 on:
   workflow_dispatch:
     inputs:
+      tag:
+        description: "Release tag, for example v0.1.0"
+        required: true
+        type: string
+      release_name:
+        description: "Release title, defaults to the tag"
+        required: false
+        type: string
       clean:
         description: "Run a clean Wails build"
         required: false
@@ -11,6 +19,19 @@ on:
         options:
           - "true"
           - "false"
+      draft:
+        description: "Create the release as a draft"
+        required: false
+        default: false
+        type: boolean
+      prerelease:
+        description: "Mark the release as a prerelease"
+        required: false
+        default: false
+        type: boolean
+
+permissions:
+  contents: write
 
 jobs:
   build:
@@ -60,9 +81,64 @@ jobs:
       - name: Build
         run: python scripts/build.py --platform "${{ matrix.platform }}" ${{ inputs.clean == 'true' && '--clean' || '' }}
 
+      - name: Package artifact
+        shell: python
+        run: |
+          from pathlib import Path
+          from zipfile import ZIP_DEFLATED, ZipFile
+
+          root = Path("build/bin")
+          out_dir = Path("dist")
+          out_dir.mkdir(exist_ok=True)
+          out = out_dir / "${{ matrix.artifact }}.zip"
+
+          with ZipFile(out, "w", ZIP_DEFLATED) as zf:
+              for path in root.rglob("*"):
+                  if path.is_file():
+                      zf.write(path, path.relative_to(root))
+
       - name: Upload artifact
         uses: actions/upload-artifact@v4
         with:
           name: ${{ matrix.artifact }}
-          path: build/bin/**
+          path: dist/${{ matrix.artifact }}.zip
           if-no-files-found: error
+
+  release:
+    name: Publish Release
+    runs-on: ubuntu-22.04
+    needs: build
+    steps:
+      - name: Download artifacts
+        uses: actions/download-artifact@v4
+        with:
+          path: release-assets
+
+      - name: Publish GitHub Release
+        env:
+          GH_TOKEN: ${{ github.token }}
+          TAG: ${{ inputs.tag }}
+          RELEASE_NAME: ${{ inputs.release_name }}
+          DRAFT: ${{ inputs.draft }}
+          PRERELEASE: ${{ inputs.prerelease }}
+        run: |
+          set -euo pipefail
+          shopt -s globstar nullglob
+
+          assets=(release-assets/**/*.zip)
+          if [ "${#assets[@]}" -eq 0 ]; then
+            echo "No release assets found" >&2
+            exit 1
+          fi
+
+          title="${RELEASE_NAME:-$TAG}"
+          flags=(--title "$title" --notes "Manual build from ${GITHUB_SHA}." --target "$GITHUB_SHA")
+          if [ "$DRAFT" = "true" ]; then flags+=(--draft); fi
+          if [ "$PRERELEASE" = "true" ]; then flags+=(--prerelease); fi
+
+          if gh release view "$TAG" >/dev/null 2>&1; then
+            gh release edit "$TAG" "${flags[@]}"
+            gh release upload "$TAG" "${assets[@]}" --clobber
+          else
+            gh release create "$TAG" "${assets[@]}" "${flags[@]}"
+          fi
